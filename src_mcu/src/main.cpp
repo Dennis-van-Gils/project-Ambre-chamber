@@ -48,9 +48,10 @@ DHT dht(PIN_DHT22, DHT22);  // Instantiate the DHT22
 
 #define UPDATE_PERIOD_DS18B20 1000  // [ms]
 #define UPDATE_PERIOD_DHT22 2000    // [ms]
-float ds18_temp(NAN);     // Temperature       ['C]
-float dht22_humi(NAN);    // Relative humidity [%]
-float dht22_temp(NAN);    // Temperature       ['C]
+float ds18_temp(NAN);        // Temperature       ['C]
+float dht22_humi(NAN);       // Relative humidity [%]
+float dht22_temp(NAN);       // Temperature       ['C]
+bool is_valve_open = false;  // State of the solenoid valve
 
 // -----------------------------------------------------------------------------
 //    setup
@@ -89,7 +90,7 @@ void loop() {
     uint32_t now = millis();
     static uint32_t dht22_tick = 0;
     static uint32_t ds18_tick = 0;
-    static bool toggle = false;
+    static bool toggle_LED = false;
 
     if (now - dht22_tick >= UPDATE_PERIOD_DHT22) {
         // The DHT22 sensor will report the average temperature and humidity
@@ -115,19 +116,13 @@ void loop() {
         }
 
         // Heartbeat LED
-        if (toggle) {
+        if (toggle_LED) {
             neo.setBrightness(NEO_BRIGHT);
         } else {
             neo.setBrightness(NEO_DIM);
         }
         neo.show();
-        toggle = !toggle;
-
-        Serial.println(
-                String(ds18_tick) +
-                '\t' + String(ds18_temp, 1) +
-                '\t' + String(dht22_temp, 1)+
-                '\t' + String(dht22_humi, 1));
+        toggle_LED = !toggle_LED;
     }
 
     if (sc.available()) {
@@ -137,9 +132,11 @@ void loop() {
             Serial.println("Arduino, Ambre chamber");
 
         } else if(strcmp(strCmd, "0") == 0) {
+            is_valve_open = false;
             digitalWrite(PIN_SOLENOID_VALVE, LOW);
 
         } else if(strcmp(strCmd, "1") == 0) {
+            is_valve_open = true;
             digitalWrite(PIN_SOLENOID_VALVE, HIGH);
 
         } else {
@@ -147,7 +144,8 @@ void loop() {
                 String(ds18_tick) +
                 '\t' + String(ds18_temp, 1) +
                 '\t' + String(dht22_temp, 1)+
-                '\t' + String(dht22_humi, 1));
+                '\t' + String(dht22_humi, 1) +
+                '\t' + String(is_valve_open));
         }
     }
 }
