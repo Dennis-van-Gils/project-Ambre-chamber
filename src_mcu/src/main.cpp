@@ -9,7 +9,17 @@
         Reads out temperature.
 
     Solenoid valve
-        Controls N2 flow.
+        Controls either a dry N2 air flow or a humid air flow, depending what
+        the user needs at that moment.
+
+        We define:
+            humi_threshold:
+                Threshold in the humidity value above or below which the valve
+                should open.
+
+            open_valve_when_super_humi:
+                Boolean. Should the valve open when the humidity is above the
+                threshold (true) or below the threshold (false).
 
   The RGB LED of the Feather M4 will indicate its status:
   * Blue : We're setting up
@@ -18,7 +28,7 @@
   Every update, the LED will alternate in brightness.
 
   Dennis van Gils
-  21-08-2020
+  31-08-2020
 *******************************************************************************/
 
 #include <Arduino.h>
@@ -52,6 +62,9 @@ float ds18_temp(NAN);        // Temperature       ['C]
 float dht22_humi(NAN);       // Relative humidity [%]
 float dht22_temp(NAN);       // Temperature       ['C]
 bool is_valve_open = false;  // State of the solenoid valve
+
+float humi_threshold = 50;   // Humidity threshold [%]
+bool open_valve_when_super_humi = true;
 
 // -----------------------------------------------------------------------------
 //    setup
@@ -125,19 +138,52 @@ void loop() {
         toggle_LED = !toggle_LED;
     }
 
+    // Automatic control of the valve depending on the humidity
+    if (isnan(dht22_humi)) {
+        is_valve_open = false;
+        digitalWrite(PIN_SOLENOID_VALVE, LOW);
+    } else {
+        if (
+            ((dht22_humi > humi_threshold) && open_valve_when_super_humi) ||
+            ((dht22_humi < humi_threshold) && !open_valve_when_super_humi)
+           ) {
+            is_valve_open = true;
+            digitalWrite(PIN_SOLENOID_VALVE, HIGH);
+        } else {
+            is_valve_open = false;
+            digitalWrite(PIN_SOLENOID_VALVE, LOW);
+        }
+    }
+
     if (sc.available()) {
         strCmd = sc.getCmd();
 
         if (strcmp(strCmd, "id?") == 0) {
             Serial.println("Arduino, Ambre chamber");
 
-        } else if(strcmp(strCmd, "0") == 0) {
+        } else if (strcmp(strCmd, "th?") == 0) {
+            // Get humidity threshold
+            Serial.println(humi_threshold, 0);
+
+        } else if (strncmp(strCmd, "th", 2) == 0) {
+            // Set humidity threshold
+            humi_threshold = constrain(parseFloatInString(strCmd, 2), 0, 100);
+
+        } else if (strcmp(strCmd, "open when super humi") == 0) {
+            open_valve_when_super_humi = true;
+
+        } else if (strcmp(strCmd, "open when sub humi") == 0) {
+            open_valve_when_super_humi = false;
+
+        /*
+        } else if (strcmp(strCmd, "0") == 0) {
             is_valve_open = false;
             digitalWrite(PIN_SOLENOID_VALVE, LOW);
 
-        } else if(strcmp(strCmd, "1") == 0) {
+        } else if (strcmp(strCmd, "1") == 0) {
             is_valve_open = true;
             digitalWrite(PIN_SOLENOID_VALVE, HIGH);
+        */
 
         } else {
             Serial.println(
