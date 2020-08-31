@@ -8,13 +8,14 @@
 
 Ambre chamber
 =======================
+
 *A Physics of Fluids project.*
 
 A temperature and humidity controlled chamber build from an Adafruit Feather M4
 Express micro-controller board and a DHT22 and DS18B20 sensor. Cooling is
 provided by Peltier elements, which are controlled by an independent power
-supply. The humidity is regulated by a solenoid valve connected up to the N2 gas
-line.
+supply. The humidity is regulated by a solenoid valve connected up to a N2 gas
+line or a humid air line.
 
 - Github: https://github.com/Dennis-van-Gils/project-Ambre-chamber
 
@@ -22,6 +23,7 @@ line.
 
 Instructions
 ============
+
 Download the `latest release <https://github.com/Dennis-van-Gils/project-Ambre-chamber/releases/latest>`_
 and unpack to a folder onto your drive.
 
