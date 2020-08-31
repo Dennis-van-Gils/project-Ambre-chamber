@@ -169,10 +169,16 @@ void loop() {
             // Set humidity threshold
             humi_threshold = constrain(parseFloatInString(strCmd, 2), 0, 100);
 
+        } else if (strcmp(strCmd, "open when super humi?") == 0) {
+            // Get
+            Serial.println(open_valve_when_super_humi);
+
         } else if (strcmp(strCmd, "open when super humi") == 0) {
+            // Set
             open_valve_when_super_humi = true;
 
         } else if (strcmp(strCmd, "open when sub humi") == 0) {
+            // Set
             open_valve_when_super_humi = false;
 
         /*

@@ -5,9 +5,9 @@
 __author__ = "Dennis van Gils"
 __authoremail__ = "vangils.dennis@gmail.com"
 __url__ = "https://github.com/Dennis-van-Gils/project-Ambre-chamber"
-__date__ = "24-08-2020"
-__version__ = "1.0"
-# pylint: disable=bare-except, broad-except
+__date__ = "31-08-2020"
+__version__ = "2.0"
+# pylint: disable=bare-except, broad-except, try-except-raise
 
 import os
 import sys
@@ -23,6 +23,7 @@ import pyqtgraph as pg
 
 from dvg_debug_functions import tprint, dprint, print_fancy_traceback as pft
 from dvg_pyqt_controls import (
+    create_LED_indicator,
     create_Toggle_button,
     SS_TEXTBOX_READ_ONLY,
     SS_GROUP,
@@ -91,6 +92,10 @@ class State(object):
         self.dht22_temp = np.nan  # ['C]
         self.dht22_humi = np.nan  # [%]
         self.is_valve_open = False
+
+        # Automatic valve control
+        self.humi_threshold = np.nan  # [%]
+        self.open_valve_when_super_humi = np.nan
 
 
 state = State()
@@ -316,27 +321,49 @@ class MainWindow(QtWid.QWidget):
         #  Group 'Valve control'
         # -------------------------
 
-        self.qpbt_valve = create_Toggle_button()
-        self.qpbt_valve.clicked.connect(
-            lambda state: qdev_ard.send(ard.write, "%i" % state)
+        self.LED_is_valve_open = create_LED_indicator()
+        self.qlin_humi_threshold = QtWid.QLineEdit(
+            "%d" % state.humi_threshold,
+            alignment=QtCore.Qt.AlignRight,
+            maximumWidth=36,
+        )
+        self.qlin_humi_threshold.editingFinished.connect(
+            self.process_qlin_humi_threshold
+        )
+        self.qpbt_open_when_super_humi = QtWid.QPushButton(
+            (
+                "humidity > threshold"
+                if state.open_valve_when_super_humi
+                else "humidity < threshold"
+            ),
+            checkable=True,
+            checked=state.open_valve_when_super_humi,
+        )
+        self.qpbt_open_when_super_humi.clicked.connect(
+            self.process_qpbt_open_when_super_humi
         )
 
+        # fmt: off
         grid = QtWid.QGridLayout()
-        grid.addWidget(self.qpbt_valve, 0, 0)
+        grid.addWidget(QtWid.QLabel("Is valve open?")    , 0, 0)
+        grid.addWidget(self.LED_is_valve_open            , 0, 1)
+        grid.addWidget(QtWid.QLabel("Humidity threshold"), 1, 0)
+        grid.addWidget(self.qlin_humi_threshold          , 1, 1)
+        grid.addWidget(QtWid.QLabel("%")                 , 1, 2)
+        grid.addWidget(QtWid.QLabel("Open valve when")   , 2, 0)
+        grid.addWidget(self.qpbt_open_when_super_humi    , 2, 1, 1, 2)
         grid.setAlignment(QtCore.Qt.AlignTop)
+        # fmt: on
 
-        qgrp_valve = QtWid.QGroupBox("N2 gas")
+        qgrp_valve = QtWid.QGroupBox("Valve control")
         qgrp_valve.setLayout(grid)
-
-        hbox_sub = QtWid.QHBoxLayout()
-        hbox_sub.addWidget(qgrp_chart, stretch=0)
-        hbox_sub.addWidget(qgrp_valve, stretch=0)
 
         # Round up right frame
         vbox = QtWid.QVBoxLayout()
         vbox.addWidget(qgrp_readings)
         vbox.addWidget(qgrp_comments)
-        vbox.addLayout(hbox_sub, stretch=0)
+        vbox.addWidget(qgrp_valve)  # , alignment=QtCore.Qt.AlignLeft)
+        vbox.addWidget(qgrp_chart, alignment=QtCore.Qt.AlignLeft)
         vbox.addStretch()
 
         # Round up bottom frame
@@ -358,6 +385,31 @@ class MainWindow(QtWid.QWidget):
     # --------------------------------------------------------------------------
 
     @QtCore.pyqtSlot()
+    def process_qlin_humi_threshold(self):
+        try:
+            humi_threshold = float(self.qlin_humi_threshold.text())
+        except (TypeError, ValueError):
+            humi_threshold = 50
+        except:
+            raise
+
+        state.humi_threshold = np.clip(humi_threshold, 0, 100)
+        self.qlin_humi_threshold.setText("%.0f" % state.humi_threshold)
+        qdev_ard.send(ard.write, "th%.0f" % state.humi_threshold)
+
+    @QtCore.pyqtSlot()
+    def process_qpbt_open_when_super_humi(self):
+        if self.qpbt_open_when_super_humi.isChecked():
+            state.open_valve_when_super_humi = True
+            self.qpbt_open_when_super_humi.setText("humidity > threshold")
+            qdev_ard.send(ard.write, "open when super humi")
+
+        else:
+            state.open_valve_when_super_humi = False
+            self.qpbt_open_when_super_humi.setText("humidity < threshold")
+            qdev_ard.send(ard.write, "open when sub humi")
+
+    @QtCore.pyqtSlot()
     def update_GUI(self):
         str_cur_date, str_cur_time, _ = get_current_date_time()
         self.qlbl_cur_date_time.setText(
@@ -375,11 +427,11 @@ class MainWindow(QtWid.QWidget):
         self.qlin_dht22_humi.setText("%.1f" % state.dht22_humi)
 
         if state.is_valve_open:
-            self.qpbt_valve.setText("Valve opened")
-            self.qpbt_valve.setChecked(True)
+            self.LED_is_valve_open.setText("1")
+            self.LED_is_valve_open.setChecked(True)
         else:
-            self.qpbt_valve.setText("Valve closed")
-            self.qpbt_valve.setChecked(False)
+            self.LED_is_valve_open.setText("0")
+            self.LED_is_valve_open.setChecked(False)
 
     @QtCore.pyqtSlot()
     def update_chart(self):
@@ -417,11 +469,11 @@ def notify_connection_lost():
         str_cur_time,
     )
     print("\nCRITICAL ERROR @ %s" % str_msg)
-    reply = QtWid.QMessageBox.warning(
+    reply_ = QtWid.QMessageBox.warning(
         window, "CRITICAL ERROR", str_msg, QtWid.QMessageBox.Ok
     )
 
-    if reply == QtWid.QMessageBox.Ok:
+    if reply_ == QtWid.QMessageBox.Ok:
         pass  # Leave the GUI open for read-only inspection by the user
 
 
@@ -442,8 +494,8 @@ def DAQ_function():
     str_cur_date, str_cur_time, str_cur_datetime = get_current_date_time()
 
     # Query the Arduino for its state
-    success, tmp_state = ard.query_ascii_values("?", delimiter="\t")
-    if not (success):
+    success_, tmp_state = ard.query_ascii_values("?", delimiter="\t")
+    if not (success_):
         dprint(
             "'%s' reports IOError @ %s %s"
             % (ard.name, str_cur_date, str_cur_time)
@@ -534,6 +586,15 @@ if __name__ == "__main__":
         print("Exiting...\n")
         sys.exit(0)
 
+    # Get the initial state of the valve control
+    success, reply = ard.query("th?")
+    if success:
+        state.humi_threshold = float(reply)
+
+    success, reply = ard.query("open when super humi?")
+    if success:
+        state.open_valve_when_super_humi = bool(int(reply))
+
     # --------------------------------------------------------------------------
     #   Create application and main window
     # --------------------------------------------------------------------------
@@ -573,7 +634,7 @@ if __name__ == "__main__":
     qdev_ard.create_worker_DAQ(
         DAQ_function             = DAQ_function,
         DAQ_interval_ms          = DAQ_INTERVAL_MS,
-        critical_not_alive_count = 3,
+        critical_not_alive_count = 1,
         debug                    = DEBUG,
     )
     # fmt: on
