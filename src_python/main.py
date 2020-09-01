@@ -425,6 +425,10 @@ class MainWindow(QtWid.QWidget):
         self.qlin_ds18b20_temp.setText("%.1f" % state.ds18b20_temp)
         self.qlin_dht22_temp.setText("%.1f" % state.dht22_temp)
         self.qlin_dht22_humi.setText("%.1f" % state.dht22_humi)
+        self.qlbl_title.setText(
+            "Interior:  %.1f °C,  %.1f %%"
+            % (state.dht22_temp, state.dht22_humi)
+        )
 
         if state.is_valve_open:
             self.LED_is_valve_open.setText("1")
